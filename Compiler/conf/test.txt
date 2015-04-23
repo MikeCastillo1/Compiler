@@ -1,0 +1,9 @@
+public class extends HOla {
+	public const hola=+56;
+	public const hola=-56;
+	public const hola=-56.90;
+	public const hola=+56.0;
+
+	private void quehace345 (char hola,A m,string hola);
+
+}

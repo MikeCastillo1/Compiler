@@ -1,0 +1,337 @@
+/* -*- Mode: vala; indent-tabs-mode: t; c-basic-offset: 4; tab-width: 4 -*-  */
+/*
+ * log-out.vala
+ * Copyright (C) 2015 Miguel Angel Castillo Sanchez <kmsiete@gmail.com>
+ *
+ * Compiler is free software: you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Compiler is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+using Gee;
+using Compiler.Util;
+
+namespace Compiler.UI{
+	public class LogOut : Gtk.Box {
+		private const string TAG = "LOG_OUT";
+		private signal void source_buffer_set ();
+	 
+		private Gtk.Notebook note_book;
+		private Log log;
+		private ArrayList<LexicalRow> lexical_rows;
+		private ArrayList<SyntacticRow> syntactic_rows;
+		private ArrayList<SemanticRow> semantic_rows;
+	 
+		private Gtk.TextIter prev_lexical_start_iter;
+		private Gtk.TextIter prev_lexical_end_iter;
+		private Gtk.TextIter prev_syntactic_start_iter;
+		private Gtk.TextIter prev_syntactic_end_iter;
+		private Gtk.TextIter prev_semantic_start_iter;
+		private Gtk.TextIter prev_semantic_end_iter;
+	 
+		public Gtk.ListBox lexical_list  { get; private set; }
+		public Gtk.ListBox syntactic_list { get; private set; }
+		public Gtk.ListBox semantic_list { get; private set; }
+		 
+		public Gtk.TextView semantic_textview  { get; private set; }
+	 
+		public ArrayList<Token?> lexical_tokens { private get; set; }
+		public ArrayList<Sentence?> syntactic_sentences { private get; set; }
+	 
+		public string lexical_error { private get; set; }
+		public string syntactic_error { private get; set; }
+		public ArrayList <SemanticErrorLocalization?> semantic_errors { private get; set; }
+	 
+		public Gtk.SourceBuffer source_buffer { get; set; }
+
+		public LogOut () {
+			this.lexical_rows   =  new ArrayList<LexicalRow> ();
+			this.syntactic_rows =  new ArrayList<SyntacticRow> ();
+			this.semantic_rows  = new ArrayList<SemanticRow> ();
+			this.log = new Log (true);
+			this.orientation = Gtk.Orientation.HORIZONTAL;
+			this.homogeneous  = false;
+
+			this.lexical_list = new Gtk.ListBox();
+			this.lexical_list.row_selected.connect (on_lexical_list_row_selected);
+			var lexical_scrolled  = new Gtk.ScrolledWindow (null, null);
+			var lexical_viewport = new Gtk.Viewport (null, null);
+			lexical_viewport.hexpand = true;
+			lexical_viewport.vexpand = true;
+			lexical_viewport.add (lexical_list);
+			lexical_scrolled.add (lexical_viewport);
+
+			this.syntactic_list = new Gtk.ListBox ();
+			this.syntactic_list.row_selected.connect (on_syntactic_list_row_selected);
+			var syntactic_scrolled  = new Gtk.ScrolledWindow (null, null);
+			var syntactic_viewport = new Gtk.Viewport (null,null);
+			syntactic_viewport.hexpand = true;
+			syntactic_viewport.vexpand = true;
+			syntactic_viewport.add (syntactic_list);
+			syntactic_scrolled.add (syntactic_viewport);
+
+			this.semantic_list = new Gtk.ListBox ();
+			this.semantic_list.row_selected.connect (on_semantic_list_row_selected);
+			var semantic_scrolled  = new Gtk.ScrolledWindow (null, null);
+			var semantic_viewport = new Gtk.Viewport (null,null);
+			semantic_viewport.hexpand = true;
+			semantic_viewport.vexpand = true;
+			semantic_viewport.add (semantic_list);
+			semantic_scrolled.add (semantic_viewport);
+
+
+			this.note_book = new Gtk.Notebook ();
+			this.note_book.notify["page"].connect (()=>{
+				this.clean_tags ();
+			});
+			//this.note_book.width_request = 200;
+			this.note_book.append_page (lexical_scrolled, new Gtk.Label ("Lexico"));
+			this.note_book.append_page (syntactic_scrolled, new Gtk.Label ("Sintactico"));
+			this.note_book.append_page (semantic_scrolled, new Gtk.Label ("Semantico"));
+
+			this.add (note_book);
+		}
+		public void init_iters (){
+			this.source_buffer.get_start_iter (out this.prev_lexical_start_iter);
+			this.source_buffer.get_end_iter (out this.prev_lexical_end_iter);
+
+			var lexical_tag = this.source_buffer.create_tag (LEXICAL_TAG);
+
+			Gdk.RGBA rgba = Gdk.RGBA ();
+			rgba.parse ("#01A9DB");
+			lexical_tag.background_rgba = rgba;
+			Gdk.RGBA rgba2 = Gdk.RGBA ();
+			rgba2.parse ("#000000");
+			lexical_tag.foreground_rgba = rgba2;
+			lexical_tag.weight = 1000;
+			lexical_tag.style = Pango.Style.ITALIC;
+			lexical_tag.scale = 1.3;
+
+			this.source_buffer.get_start_iter (out this.prev_syntactic_start_iter);
+			this.source_buffer.get_end_iter (out this.prev_syntactic_end_iter);
+
+			var syntactic_tag = this.source_buffer.create_tag (SYNTACTIC_TAG);
+			rgba.parse ("#FFFF00");
+			syntactic_tag.background_rgba = rgba;
+			rgba2.parse ("#000000");
+			syntactic_tag.foreground_rgba = rgba2;
+			syntactic_tag.weight = 1000;
+			syntactic_tag.style = Pango.Style.ITALIC;
+			syntactic_tag.scale = 1.3;
+
+			this.source_buffer.get_start_iter (out this.prev_semantic_start_iter);
+			this.source_buffer.get_end_iter (out this.prev_semantic_end_iter);
+
+			var semantic_tag = this.source_buffer.create_tag (SEMANTIC_TAG);
+			
+			rgba.parse ("#FFFFFF");
+			semantic_tag.background_rgba = rgba;
+			rgba2.parse ("#000000");
+			semantic_tag.foreground_rgba = rgba2;
+			semantic_tag.weight = 1000;
+			semantic_tag.style = Pango.Style.ITALIC;
+			semantic_tag.scale = 1.3;
+		}
+		public void unselect_rows (){
+			var lexical_selected = this.lexical_list.get_selected_row ();
+			var syntactic_selected = this.syntactic_list.get_selected_row ();
+			var semantic_selected = this.semantic_list.get_selected_row ();
+			if (lexical_selected != null)
+				this.lexical_list.unselect_row (lexical_selected);
+			if (syntactic_selected != null)
+				this.syntactic_list.unselect_row (syntactic_selected);
+			if (semantic_selected != null)
+				this.semantic_list.unselect_row (semantic_selected);
+		}
+		public void remove_rows (){
+		//lexical
+			foreach (var item in lexical_rows){
+				this.lexical_list.remove (item);
+			}
+			this.lexical_rows.clear ();
+
+				//syntactic
+			foreach (var item in syntactic_rows){
+				this.syntactic_list.remove (item);
+			}
+			this.syntactic_rows.clear ();
+			//semantic
+			foreach (var item in semantic_rows){
+				this.semantic_list.remove (item);
+			}
+			this.semantic_rows.clear ();
+		}
+		public void update (){
+			this.unselect_rows ();
+			//lexical
+			LexicalRow lexical_row;
+			foreach (var item in lexical_tokens){
+				lexical_row = new LexicalRow (item);
+				this.lexical_rows.add (lexical_row);
+				this.lexical_list.add (lexical_row);
+			}	
+			lexical_row = new LexicalRow.from_string (lexical_error.splice (0,22,null));
+			this.lexical_list.add (lexical_row);
+			this.lexical_rows.add (lexical_row);
+
+		//syntactic
+			SyntacticRow syntactic_row;
+			foreach (var item in syntactic_sentences){
+				syntactic_row = new SyntacticRow (item);
+				this.syntactic_rows.add (syntactic_row);
+				this.syntactic_list.add (syntactic_row);
+			}
+			syntactic_row = new SyntacticRow.from_string (syntactic_error.splice (0,24,null));
+			this.syntactic_list.add (syntactic_row);
+			this.syntactic_rows.add (syntactic_row);
+			//semantic
+			
+			SemanticRow semantic_row;
+			foreach (var item in this.semantic_errors){
+				semantic_row = new SemanticRow (item);
+				this.semantic_list.add (semantic_row);
+				this.semantic_rows.add (semantic_row);
+			}
+			
+		}
+
+		private void on_lexical_list_row_selected (Gtk.ListBoxRow? row){
+			
+			Gtk.TextIter end_iter;
+			Gtk.TextIter start_iter;
+			this.source_buffer.remove_tag_by_name (LEXICAL_TAG,prev_lexical_start_iter, prev_lexical_end_iter);
+			var _row = row as LexicalRow;
+
+			if (_row.token != null){
+				
+				this.source_buffer.get_iter_at_line_offset (out start_iter,
+														_row.token.line,
+														_row.token.column);
+
+				this.source_buffer.get_iter_at_line_offset (out end_iter,
+														_row.token.line,
+														_row.token.column + _row.token.lexema.char_count ());
+
+				this.source_buffer.select_range (start_iter, end_iter);
+				this.source_buffer.apply_tag_by_name (LEXICAL_TAG, start_iter, end_iter);
+				this.source_buffer.place_cursor (start_iter);
+				this.prev_lexical_end_iter   = end_iter;
+				this.prev_lexical_start_iter = start_iter;
+			}
+
+		}
+		private void on_syntactic_list_row_selected (Gtk.ListBoxRow? row){
+			Gtk.TextIter end_iter;
+			Gtk.TextIter start_iter;
+			this.source_buffer.remove_tag_by_name (SYNTACTIC_TAG,prev_syntactic_start_iter, prev_syntactic_end_iter);
+			var _row = row as SyntacticRow;
+			if (_row.sentence != null){
+				this.source_buffer.get_iter_at_line_offset (out start_iter,
+														_row.sentence.start_line,
+														_row.sentence.start_column);
+
+				this.source_buffer.get_iter_at_line_offset (out end_iter,
+															_row.sentence.end_line,
+															_row.sentence.end_column);
+
+				 this.source_buffer.select_range (start_iter, end_iter);
+				 this.source_buffer.apply_tag_by_name (SYNTACTIC_TAG, start_iter, end_iter);
+				 this.source_buffer.place_cursor (start_iter);
+
+				 this.prev_syntactic_start_iter  = start_iter;
+				 this.prev_syntactic_end_iter    = end_iter;
+			}
+		}
+		private void on_semantic_list_row_selected (Gtk.ListBoxRow? row){
+			Gtk.TextIter end_iter;
+			Gtk.TextIter start_iter;
+			this.source_buffer.remove_tag_by_name (SEMANTIC_TAG,prev_semantic_start_iter, prev_semantic_end_iter);
+			var _row = row as SemanticRow;
+			if (_row.semantic_error_localization != null){
+				this.source_buffer.get_iter_at_line_offset (out start_iter,
+														_row.semantic_error_localization.token.line,
+														_row.semantic_error_localization.token.column);
+
+				this.source_buffer.get_iter_at_line_offset (out end_iter,
+															_row.semantic_error_localization.token.line,
+															_row.semantic_error_localization.token.column + _row.semantic_error_localization.token.lexema.char_count());
+
+				 this.source_buffer.select_range (start_iter, end_iter);
+				 this.source_buffer.apply_tag_by_name (SEMANTIC_TAG, start_iter, end_iter);
+				 this.source_buffer.place_cursor (start_iter);
+
+				 this.prev_semantic_start_iter  = start_iter;
+				 this.prev_semantic_end_iter    = end_iter;
+			
+			}
+		}
+		public void clean_tags (){
+			
+			this.source_buffer.remove_tag_by_name (SEMANTIC_TAG,
+			                                       prev_semantic_start_iter, 
+			                                       prev_semantic_end_iter);
+			
+			this.source_buffer.remove_tag_by_name (SYNTACTIC_TAG,
+			                                       prev_syntactic_start_iter,
+			                                       prev_syntactic_end_iter);
+			
+			this.source_buffer.remove_tag_by_name (LEXICAL_TAG,
+			                                       prev_lexical_start_iter, 
+			                                       prev_lexical_end_iter);
+		}
+		internal class LexicalRow : Gtk.ListBoxRow {
+			public Token? token { get; private set; }
+			public LexicalRow (Token? token){
+				this.token = token;
+				var label = new Gtk.Label (@"$token");
+				label.halign = Gtk.Align.START;
+				this.add (label);
+				this.show_all ();
+			}
+			public LexicalRow.from_string (string token){
+				var label = new Gtk.Label (token);
+				label.halign = Gtk.Align.START;
+				this.token = null;
+				this.add (label);
+				this.show_all ();
+			}
+		}
+		internal class SyntacticRow : Gtk.ListBoxRow {
+			public Sentence? sentence { get; private set; }
+			public SyntacticRow (Sentence? sentence){
+				this.sentence = sentence;
+				var label = new Gtk.Label (@"$sentence");
+				label.halign = Gtk.Align.START;
+				this.add (label);
+				this.show_all ();
+			}
+			public SyntacticRow.from_string (string sentence){
+				var label = new Gtk.Label (sentence);
+				label.halign = Gtk.Align.START;
+				this.sentence = null;
+				this.add (label);
+				this.show_all ();
+			}
+		}
+	 internal class SemanticRow : Gtk.ListBoxRow {
+		 public SemanticErrorLocalization? semantic_error_localization { get; private set; }
+		 public SemanticRow (SemanticErrorLocalization? semantic_error_localization){
+			 this.semantic_error_localization = semantic_error_localization;
+			 var label  = new Gtk.Label (@"$(semantic_error_localization.error)".splice (0,23,null)+
+			                             @" <$(semantic_error_localization.token.line+1), $(semantic_error_localization.token.column+1)>");
+			 label.halign = Gtk.Align.START;
+			 this.add (label);
+			 this.show_all ();
+		 }
+	 }
+
+	}
+}

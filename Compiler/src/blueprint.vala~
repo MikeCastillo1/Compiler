@@ -1,0 +1,362 @@
+/* -*- Mode: vala; indent-tabs-mode: t; c-basic-offset: 4; tab-width: 4 -*-  */
+/*
+ * blueprint.vala
+ * Copyright (C) 2015 Miguel Angel Castillo Sanchez <kmsiete@gmail.com>
+ *
+ */
+using Gtk;
+using Cairo;
+using Gee;
+using Compiler.Util;
+
+namespace Compiler {
+	 public struct Point{
+		public int x;
+		public int y;
+		public Point (int x, int y){
+			this.x = x;
+			this.y = y;
+		}	 
+	 }
+	public enum Direction {
+		RIGHT,
+		LEFT,
+		TOP,
+		BOTTOM
+	}
+	public class Blueprint :  DrawingArea{
+		private const string TAG = "BLUEPRINT";
+		private Context _ctx;
+		private const int SIZE = 3;
+		private const double BG_SIZE = 0.3; 
+		private Log log;
+		private const int class_x = 200;
+		private const int class_y = 230;
+		private const int class_separator = 70;
+		private TreeMap <string, Point?> points;
+		 
+		// Constructor
+		public Blueprint (ArrayList <ClassDefinition?>?  classes) {
+			//var svg_surface = new SvgSurface ("class_blueprint.svg", 1300, 700);
+
+			log = new Log (false);
+			this.expand = true;
+			this.points = new TreeMap <string, Point?> ();
+			this.draw.connect ((ctx)=>{
+				_ctx = new Context (ctx.get_target ());
+				this.draw_background (ctx);
+				if (classes != null){
+					var x = 45;
+					var y = 30;
+					var i = 0;
+					
+					foreach (var item in classes){
+						this.points.set (item.name, Point (x,y));
+						this.draw_class ( ctx,x, y, item);
+						x += class_x + class_separator;
+						if (i == 4){
+							y = y + class_y + class_separator;
+							x = 45;
+						}
+						i++;
+					}
+					this.draw_conections (ctx, classes);
+					
+				}
+			
+				return true;
+			});
+			this.show_all ();
+		}
+		private void draw_conections (Context ctx, ArrayList <ClassDefinition?>?  classes){
+			Gdk.RGBA class_color = Gdk.RGBA ();
+			ctx.set_line_join (Cairo.LineJoin.BEVEL);
+
+			int middle = class_y  +class_separator/2 -20;
+			int margin = class_y/2;
+			int travel = class_x + class_separator;
+			
+			foreach (var @class in classes){
+				if (@class.heritage != ""){
+					var init_point = points.get (@class.name);
+					var end_point = points.get (@class.heritage);
+					class_color.parse ("#d0b99b");
+					ctx.set_source_rgb (class_color.red,
+						        class_color.green,
+						        class_color.blue);
+	
+					if (init_point.x > end_point.x){
+						ctx.move_to (init_point.x, init_point.y + margin);
+						if (end_point.y > init_point.y){
+							ctx.line_to (init_point.x -20, init_point.y + margin);
+							ctx.line_to (init_point.x -20, init_point.y + middle);
+							
+							var div = (init_point.x - (end_point.x + class_x)) /class_x;
+							
+							if (div > 0){
+								var _x = init_point.x - div * travel - 20;
+								if (div == 3)
+									_x +=  div * class_separator +30;
+								if (div > 3)
+									_x +=  div * class_separator ;
+								
+								ctx.line_to (_x, init_point.y + middle);
+								
+								ctx.line_to (_x, end_point.y + margin);
+							} else {
+								ctx.line_to (init_point.x - 20, end_point.y + margin);
+							}
+						} else if (end_point.y == init_point.y){
+							ctx.line_to (init_point.x -20, init_point.y + margin);
+							ctx.line_to (init_point.x -20, init_point.y + middle);
+							
+							var div = (init_point.x - (end_point.x + class_x)) /class_x;
+							
+							if (div > 0){
+								var _x = init_point.x - div * travel - 20;
+								if (div == 3)
+									_x +=  div * class_separator +30;
+								if (div > 3)
+									_x +=  div * class_separator ;
+								
+								ctx.line_to (_x, init_point.y + middle);
+								
+								ctx.line_to (_x, end_point.y + margin);
+							} else {
+								ctx.line_to (init_point.x - 20, end_point.y + margin);
+							}
+						} else if (end_point.y < init_point.y){
+							ctx.line_to (init_point.x -20, init_point.y + margin);
+							
+							var div = (init_point.x - (end_point.x + class_x)) /class_x;
+							
+							if (div > 0){
+								ctx.line_to (init_point.x -20, init_point.y - class_separator/2);
+								var _x = init_point.x - div * travel - 20;
+								if (div == 3)
+									_x +=  div * class_separator +30;
+								if (div > 3)
+									_x +=  div * class_separator -40;
+								
+								ctx.line_to (_x,init_point.y - class_separator/2);
+								
+								ctx.line_to (_x, init_point.y - class_y +45);
+							} else {
+								ctx.line_to (init_point.x - 20, end_point.y + class_y);
+							}
+						}
+						ctx.line_to (end_point.x + class_x + 15, end_point.y + margin);
+						draw_triangle (ctx, end_point.x+class_x +15, end_point.y + margin, Direction.LEFT);
+						ctx.stroke ();
+						
+					} else if (init_point.x < end_point.x){
+						/////////////7777
+						ctx.move_to (init_point.x + class_x, init_point.y + margin );
+						
+						if (end_point.y > init_point.y){
+							ctx.line_to (init_point.x +class_x +20, init_point.y + margin);
+							ctx.line_to (init_point.x +class_x +20, init_point.y + middle);
+							
+							var div = (end_point.x - (init_point.x + class_x)) /class_x;
+							
+							if (div > 0){
+								var _x = init_point.x + div * travel;
+								if (div == 1)
+									_x -=  div * class_separator -300;
+								if (div == 3)
+									_x -=  div * class_separator -180;
+								if (div == 4)
+									_x -=  div * class_separator -250;
+								
+								ctx.line_to (_x, init_point.y + middle);
+								
+								ctx.line_to (_x, end_point.y + margin);
+							} else {
+								ctx.line_to (init_point.x +class_x+ 20, end_point.y + margin);  	
+							}
+						} else if (end_point.y == init_point.y){
+							ctx.line_to (init_point.x +class_x +20, init_point.y + margin);
+							
+							var div = (end_point.x - (init_point.x + class_x)) /class_x;
+							
+							if (div > 0){
+								ctx.line_to (init_point.x +class_x +20, init_point.y - class_separator/2 );
+								var _x = init_point.x + div * travel + 20;
+								if (div == 1)
+									_x -=  div * class_separator -280;
+								if (div == 3)
+									_x -=  div * class_separator -140;
+								if (div == 4)
+									_x -=  div * class_separator -220;
+								
+								ctx.line_to (_x, init_point.y - class_separator/2 );
+								
+								ctx.line_to (_x, end_point.y + margin);
+							} else {
+								ctx.line_to (init_point.x +class_x, init_point.y + class_separator + 45);
+							}
+						} else if (end_point.y < init_point.y){
+							ctx.line_to (init_point.x +class_x +20, init_point.y + margin);
+							
+							var div = (end_point.x - (init_point.x + class_x)) /class_x;
+							
+							if (div > 0){
+								ctx.line_to (init_point.x +class_x +20, init_point.y - class_separator/2 );
+								var _x = init_point.x + div * travel + 20;
+								if (div == 1)
+									_x -=  div * class_separator -280;
+								if (div == 3)
+									_x -=  div * class_separator -140;
+								if (div == 4)
+									_x -=  div * class_separator -220;
+								
+								ctx.line_to (_x, init_point.y - class_separator/2 );
+								
+								ctx.line_to (_x, end_point.y + margin);
+							} else {
+								ctx.line_to (init_point.x +class_x +20, end_point.y - margin );
+							}
+						}
+						ctx.line_to (end_point.x - 15, end_point.y + margin);
+						draw_triangle (ctx, end_point.x-15, end_point.y + margin, Direction.RIGHT);
+						ctx.stroke ();
+					} else if (end_point.x == init_point.x){
+						if (end_point.y < init_point.y){
+							ctx.line_to (init_point.x +class_x /2, init_point.y );
+							ctx.line_to (end_point.x + class_x/2, end_point.y + class_y +15);
+							draw_triangle (ctx, end_point.x + class_x/2, end_point.y + class_y , Direction.TOP);
+							ctx.stroke ();
+						} else if (end_point.y > init_point.y){
+							ctx.line_to (init_point.x +class_x /2, init_point.y + class_y );
+							ctx.line_to (end_point.x + class_x/2, end_point.y -15);
+							draw_triangle (ctx, end_point.x + class_x/2,  end_point.y -15 , Direction.BOTTOM);
+							ctx.stroke ();
+						}
+						
+					}
+				}
+			}
+		}
+
+		private void draw_triangle (Context ctx, int x, int y, Direction direction){
+			switch (direction){
+				case Direction.RIGHT:
+					ctx.move_to (x,y);
+					ctx.rel_line_to (0,-15);
+					ctx.rel_line_to (+15,+15);
+					ctx.rel_line_to (-15,+15);
+					ctx.rel_line_to (0,-15);
+					break;
+				case Direction.LEFT:
+					
+					ctx.move_to (x,y);
+					ctx.rel_line_to (0,-15);
+					ctx.rel_line_to (-15,+15);
+					ctx.rel_line_to (+15,+15);
+					ctx.rel_line_to (0,-15);
+					break;
+				case Direction.TOP:
+					ctx.move_to (x,y);
+					ctx.rel_line_to (-15,+15);
+					ctx.rel_line_to (+30,0);
+					ctx.rel_line_to (-15,-15);
+					break;
+				case Direction.BOTTOM:
+					ctx.move_to (x,y);
+					ctx.rel_line_to (-15,0);
+					ctx.rel_line_to (+15,+15);
+					ctx.rel_line_to (+15,-15);
+					ctx.rel_line_to (-15,0);
+					break;
+			}
+			ctx.stroke ();
+			
+		}
+		private void draw_class (Context ctx, int x, int y, ClassDefinition class_definition){
+		
+			log.m (TAG, "drawing:");
+			log.m (TAG, @"$class_definition");
+			ctx.set_line_width (SIZE);
+			Gdk.RGBA class_color = Gdk.RGBA ();
+
+			//box class
+			ctx.move_to (x, y);
+			class_color.parse ("#d5ebff");
+			ctx.set_source_rgb (class_color.red,
+						        class_color.green,
+						        class_color.blue);
+			ctx.rectangle (x,y, class_x, class_y);
+
+			ctx.move_to (x,y+160);
+			ctx.rel_line_to (class_x,0);
+			ctx.stroke ();
+
+			ctx.move_to (x,y+30);
+			ctx.rel_line_to (class_x,0);
+			ctx.stroke ();
+		
+			//text
+			ctx.set_font_size (14);
+			ctx.move_to (x+5,y+20);
+			ctx.select_font_face ("URW Gothic L", FontSlant.NORMAL, FontWeight.NORMAL);
+			ctx.show_text (@"$(class_definition.header ())");
+			var _y = y+50;
+			foreach (var constant in class_definition.constants){
+				foreach (var @value in constant.constants.entries){
+					ctx.move_to (x+5,_y);
+					ctx.show_text (@"$(constant.acces_mode) $(@value.key.up()) : $(constant.type) = $(@value.value)");
+					_y += 20;
+				}
+			}
+		
+			foreach (var attribute in class_definition.attributes){
+				foreach (var item in attribute.id){
+					ctx.move_to (x+5,_y);
+					ctx.show_text ( @"$(attribute.acces_mode) $(item) : $(attribute.type)");
+					_y += 20;   
+				}
+			}
+			_y += 10;
+			foreach (var method in class_definition.methods){
+				ctx.move_to (x+5,_y);
+				ctx.show_text ( @"$method");
+				_y += 20;
+			}
+		}
+		private void draw_background (Context ctx){
+			Gdk.RGBA bg_color = Gdk.RGBA ();
+			bg_color.parse ("#084c8d");
+			Cairo.Pattern bg_pat= new Cairo.Pattern.radial (650, 350, 600, 650,  350, 200);
+			bg_pat.add_color_stop_rgb (0,
+				                       bg_color.red, 
+							           bg_color.green, 
+							           bg_color.blue);
+		
+			bg_color.parse ("#0b569b");
+			bg_pat.add_color_stop_rgb (1,
+				                       bg_color.red, 
+							           bg_color.green, 
+							           bg_color.blue);
+
+			ctx.set_source (bg_pat);
+			ctx.rectangle (0,0,1400,700);
+			ctx.fill ();
+			bg_color.parse ("#9fd1ff");
+			ctx.set_source_rgb (bg_color.red,
+				                bg_color.green, 
+				                bg_color.blue);
+		
+			ctx.set_line_width (BG_SIZE);
+			ctx.set_line_join (Cairo.LineJoin.MITER);
+			for (var i = 0; i < 2000 ;i+=40){
+				ctx.move_to (i, 0);
+				ctx.rel_line_to (0,700);
+				ctx.stroke ();	
+				ctx.move_to (0, i);
+				ctx.rel_line_to (1400,0);
+				ctx.stroke ();	
+			}
+		}
+		
+	}
+}//namespace Compiler

@@ -1,0 +1,153 @@
+/* -*- Mode: vala; indent-tabs-mode: t; c-basic-offset: 4; tab-width: 4 -*-  */
+/*
+ * source-manager.vala
+ * Copyright (C) 2015 Miguel Angel Castillo Sanchez <kmsiete@gmail.com>
+ *
+ */
+using Gee; 
+using Compiler.Util;
+
+namespace Compiler.Lexicon {
+
+internal class SourceManager : GLib.Object {
+
+    private const string TAG = "SOURCE_MANAGER";
+    
+    public int actual_column   { get; private set; }
+    public int actual_line     { get; private set; }
+    public bool has_more_chars { get; private set; }
+	public bool new_line       { get; set; }
+    public bool has_space      { get; set; }
+    public Compiler.Util.Error error         { get; private set; }
+    
+    private ArrayList<string> source;
+    private string current_line;
+	private Log log;
+    
+    public unichar value {
+	    get { 
+				return current_line [actual_column]; 
+			}
+	    private set {}
+	}
+	 
+	// Constructor
+    public SourceManager (string source_path, bool verbose = false) {
+		this.log = new Log (verbose);
+        this.source = new ArrayList<string> ();
+        //load source file
+        File source_file   = File.new_for_path (source_path);
+        string source_line = "";
+        
+        if (file_exists (source_file)){
+        
+            this.error = Compiler.Util.Error.OK;
+            try{
+            
+                var source_dis      = new DataInputStream (source_file.read ());
+			    while ((source_line = source_dis.read_line (null)) != null )
+				    source.add (source_line);
+				    
+            } catch (GLib.Error e){
+            
+                stderr.printf ("error %s\n", e.message);
+                this.error = Compiler.Util.Error.CORRUPT_FILE;
+                  
+            }
+            
+        } else{
+        
+            this.error = Compiler.Util.Error.FILE_NOT_EXIST;
+            
+        }
+        if (this.error == Compiler.Util.Error.OK && this.source.size > 0){
+            
+            this.has_more_chars = true;
+            this.actual_line    = 0;
+            this.current_line   = source [this.actual_line];
+               
+        } else{
+         
+            this.log.m (TAG,"No hay caracteres");
+            this.has_more_chars = false;
+            this.actual_line    = -1;
+            
+        }
+        this.has_space = false;
+        this.actual_column = -1;
+		this.new_line = false;
+        this.log.m (TAG,"Creado Source Manager");
+	}
+	//devuelve el siguiente caracter
+	public bool next (bool future = false){
+	    int temp_line   = this.actual_line;
+	    int temp_column = this.actual_column;
+	    
+	    unichar? @unichar = null;
+	    if (this.has_more_chars){
+	    
+	        next_char (ref @unichar);
+	        @unichar = current_line [actual_column];
+			this.log.m (TAG, @"-$unichar-");
+	        
+	        if (@unichar == null)
+	            return false;
+	            
+	        while (@unichar.isspace () || !@unichar.isprint ()){
+	            next_char (ref @unichar);
+	            if (@unichar == null)
+	                return false;
+            }
+            	            
+	    }//if (has_more_chars)
+	    
+	    if (future){
+	        this.actual_line   = temp_line;
+	        this.actual_column = temp_column;   
+	    }
+	    return true;
+	    
+	}//next
+	
+	private void next_char (ref unichar? @unichar){
+	    
+	    this.actual_column ++;
+        next_line ();
+        
+        if (!this.has_more_chars)
+            @unichar = null;
+        else{
+            @unichar = current_line [actual_column];
+            
+            if (@unichar.isspace ())
+                this.has_space = true;
+        }
+        
+	}
+	
+	//pasa a la siguiente linea
+	private void next_line (){
+	
+	   if (this.actual_column == this.current_line.char_count ()){
+	   
+	        this.actual_line ++;
+	        this.actual_column = -1;
+	        this.has_space     = false;
+			this.new_line = true;
+	        
+	        if (this.actual_line == this.source.size){
+	        
+	            this.has_more_chars = false;
+				this.actual_line    = -1;
+	            
+	        } else
+	            this.current_line = source [this.actual_line];
+	            
+	   }
+	   
+	}
+	
+	
+}//class SourceManager
+
+}// namespace Compiler

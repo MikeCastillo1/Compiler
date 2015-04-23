@@ -1,0 +1,369 @@
+
+/*
+ * state-machine.vala
+ * Copyright (C) 2015 Miguel Angel Castillo S??nchez <kmsiete@gmail.com>
+ *
+ */
+
+using Gee;
+using GLib;
+using Compiler.Util;
+
+namespace Compiler.Lexicon{
+
+
+internal class Lexical : GLib.Object {
+
+    private const string TAG = "LEXICAL";
+
+    private SourceManager? source_manager;
+	private StateMachine?  state_machine;
+
+	public Token? token { get; private set; }
+	public bool has_more_tokens { get; private set; }
+	public LexicalError error { get; set; }
+	public Compiler.Util.Error IOerror { get; private set; }
+
+	private HashSet<string> reserved_words { get; private set; }
+	private Log log;
+
+	// Constructor
+	public Lexical (bool verbose  = false) {
+		this.log = new Log (verbose);
+        this.has_more_tokens = true;
+        this.token           = Token ();
+        this.token.type      = Util.Type.NO_TYPE;
+        this.token.line      = 0;
+        this.token.column    = 0;
+        this.token.lexema    = "";
+        this.error           = LexicalError.NONE;
+        this.source_manager  = null;
+        this.state_machine   = null;
+        this.token           = null;
+	}
+
+    /**
+        crea un source manager para el manejo apropiado del codigo fuente
+    */
+
+    public void create_source_manager (string source_file){
+
+        this.source_manager  = new SourceManager (source_file);
+        this.source_manager.next ();
+		this.has_more_tokens = source_manager.has_more_chars;
+		this.source_manager.new_line = false;
+		this.source_manager.has_space = false;
+        this.token = Token ();
+
+    }
+
+    public void create_state_machine (string transition_file){
+
+        this.state_machine = new StateMachine (transition_file);
+
+    }
+
+	public void add_reserved_words (string reserved_words_path){
+	    //inicializamos los contenedores
+	    this.log.m (TAG, "Palabras reservadas");
+		this.reserved_words = new HashSet<string> ();
+
+		File reserved_words_file   = File.new_for_path (reserved_words_path);
+
+		if ( !file_exists ( reserved_words_file ))
+			this.IOerror = Compiler.Util.Error.FILE_NOT_EXIST;
+		try{
+
+			var reserved_words_dis   = new DataInputStream (reserved_words_file.read ());
+            string reserved_words_line;
+
+			while ((reserved_words_line = reserved_words_dis.read_line (null)) != null)
+				reserved_words.add (reserved_words_line);
+
+		} catch (GLib.Error e){
+
+		    stderr.printf ("error %s\n", e.message);
+		    this.IOerror = Compiler.Util.Error.CORRUPT_FILE;
+
+		}
+
+	}
+	public bool next (){
+
+	    if (this.state_machine == null){
+
+	        this.has_more_tokens = false;
+	        this.IOerror = Compiler.Util.Error.NO_STATE_MACHINE;
+	        return false;
+
+	    }
+	    if (this.source_manager == null){
+
+	        this.has_more_tokens = false;
+	        this.IOerror = Compiler.Util.Error.NO_SOURCE;
+	        return false;
+
+	    }
+
+	    if (this.source_manager.has_more_chars){
+
+	        bool end_token    = false;
+	        string lexema     = "";
+	        unichar? @unichar = source_manager.value;
+	        int current_line  = this.source_manager.actual_line;
+
+	        var probable_token    = Token ();
+            probable_token.line   = current_line;
+            probable_token.column = this.source_manager.actual_column;
+            probable_token.type   = Compiler.Util.Type.NO_TYPE;
+            probable_token.lexema = lexema;
+
+            this.token = probable_token;
+			this.source_manager.new_line = false;
+
+            if (!this.state_machine.is_in_alphabet (@unichar)){
+
+                this.has_more_tokens  = false;
+                this.error            = LexicalError.NO_IN_ALPHABET;
+                probable_token.lexema = @"$unichar";
+                probable_token.line   = source_manager.actual_line;
+                probable_token.column = source_manager.actual_column;
+                this.token            = probable_token;
+				this.source_manager.has_space = false;
+                return false;
+
+            }
+
+            if (!this.state_machine.generate_pattern (@unichar)){
+
+                this.has_more_tokens  = false;
+                this.error            = LexicalError.NO_GENERATE_PATTERN;
+                probable_token.lexema = @"$unichar";
+                this.token = probable_token;
+                return false;
+            }
+
+	        do{
+	            this.log.m (TAG, "ciclo");
+	      		if (!this.has_more_tokens && !this.source_manager.has_more_chars){
+
+					end_token = true;
+					 this.log.m(TAG, "last oportunity cilco");
+					bool flag_1 =  last_opurtunity (ref probable_token, lexema, true);
+					if (this.state_machine.is_in_current_pattern (@unichar)){
+
+						this.log.m(TAG, "fin fin ");
+						if (this.source_manager.has_more_chars)
+							lexema += @"$unichar";
+						update_token (ref probable_token, lexema);
+						this.source_manager.next ();
+						this.has_more_tokens = this.source_manager.has_more_chars;
+						this.state_machine.reset_pattern ();
+						this.source_manager.new_line = false;
+
+					} else
+						this.state_machine.reset_pattern ();
+					this.source_manager.has_space = false;
+					return flag_1;
+
+				}
+
+                if (!this.state_machine.is_in_alphabet (@unichar)){
+
+                    this.has_more_tokens  = false;
+                    this.error            = LexicalError.NO_IN_ALPHABET;
+                    probable_token.lexema = @"$unichar";
+                    probable_token.line   = source_manager.actual_line;
+                    probable_token.column = source_manager.actual_column;
+                    this.token            = probable_token;
+					this.source_manager.has_space = false;
+                    return false;
+
+                }
+
+				this.log.m (TAG, @"esta en alfabeto: -$unichar-");
+
+				if (this.source_manager.has_space){
+
+                    this.log.m (TAG, @"Hubo espacio $(source_manager.actual_column)");
+
+                    this.state_machine.go_to_next_state (' ');
+                    this.source_manager.has_space = false;
+                    end_token                = true;
+
+                }
+
+				if (this.source_manager.new_line){
+					this.log.m (TAG, "nueva linea");
+					this.source_manager.new_line = false;
+					if (this.state_machine.state_id == 0){
+						this.state_machine.go_to_next_state (@unichar);
+						if (lexema.length == 0){
+							lexema += @"$unichar";
+							this.source_manager.next ();
+							this.has_more_tokens = this.source_manager.has_more_chars;
+						}
+
+						update_token (ref probable_token, lexema);
+						this.source_manager.has_space = false;
+						last_opurtunity (ref probable_token, lexema, true);
+						return this.has_more_tokens;
+					}
+					bool flag_2 =  last_opurtunity (ref probable_token, lexema, true);
+					if (this.state_machine.is_in_current_pattern (@unichar)){
+
+						this.log.m (TAG, "fin fin ");
+						lexema += @"$unichar";
+						update_token (ref probable_token, lexema);
+						this.source_manager.next ();
+						this.has_more_tokens = this.source_manager.has_more_chars;
+						this.state_machine.reset_pattern ();
+
+					} else
+						this.state_machine.reset_pattern ();
+
+
+					this.source_manager.has_space = false;
+					return flag_2;
+				}
+
+                if (this.is_end_state (ref probable_token, lexema, true)){
+
+					if (this.state_machine.is_in_current_pattern (@unichar)){
+
+						this.log.m (TAG, "fin fin ");
+						lexema += @"$unichar";
+						update_token (ref probable_token, lexema);
+						this.source_manager.next ();
+						this.has_more_tokens = this.source_manager.has_more_chars;
+						this.state_machine.reset_pattern ();
+						this.source_manager.new_line = false;
+
+					} else
+						this.state_machine.reset_pattern ();
+
+					this.source_manager.has_space = false;
+					return true;
+				}
+
+
+	            if (!end_token){
+
+                    this.log.m (TAG, "no end");
+	                if (!this.state_machine.go_to_next_state (@unichar)){
+
+	                    this.has_more_tokens  = false;
+	                    this.error            = LexicalError.INCOMPLETE_PATTERN;
+	                    probable_token.lexema = lexema;
+	                    this.token = probable_token;
+	                    return false;
+
+					} else{
+						if (this.is_end_state (ref probable_token, lexema, true)){
+							this.log.m (TAG, "si es final");
+							this.log.m (TAG, this.state_machine.pattern_to_string());
+							if (this.state_machine.is_in_current_pattern (@unichar)){
+
+								this.log.m (TAG, "esta en el átron actual");
+								lexema += @"$unichar";
+								update_token (ref probable_token, lexema);
+								this.source_manager.next ();
+								this.has_more_tokens = this.source_manager.has_more_chars;
+								this.source_manager.has_space = false;
+								this.state_machine.reset_pattern ();
+								this.source_manager.new_line = false;
+								return true;
+
+							} else
+								this.state_machine.reset_pattern ();
+
+							this.source_manager.has_space = false;
+							if (lexema.length == 0){
+
+								lexema += @"$unichar";
+								update_token (ref probable_token, lexema);
+								this.source_manager.next ();
+								this.has_more_tokens = this.source_manager.has_more_chars;
+								this.source_manager.has_space = false;
+
+							}
+							return true;
+
+						}
+
+					}
+
+
+				}
+
+				if (!end_token){
+
+					lexema += @"$unichar";
+					this.source_manager.next ();
+					@unichar = this.source_manager.value;
+					this.has_more_tokens = this.source_manager.has_more_chars;
+
+				}
+	            this.log.m (TAG,"Lexema-"+lexema+"-");
+
+	        } while (!end_token);
+
+	        if (end_token)
+	            return true;
+
+	    }// if (this.source_manager.has_more_chars)
+	        return false;
+
+	}
+
+    private void update_token (ref Token probable_token, string lexema){
+		this.log.m (TAG, @"update lexema -$lexema-");
+        if (lexema in this.reserved_words){
+			this.log.m (TAG,"RW_"+lexema.up () );
+			probable_token.type = Compiler.Util.Type.parse_type ("COMPILER_UTIL_TYPE_RW_"+lexema.up ());
+        } else{
+			probable_token.type = Compiler.Util.Type.parse_type (state_machine.token_type);
+        }
+
+        probable_token.lexema = lexema;
+        this.token            = probable_token;
+    }
+
+    private bool is_end_state (ref Token probable_token, string lexema, bool to_init = false){
+
+        if (this.state_machine.is_end_state ()){
+			this.log.m (TAG, @"end state lexema -$lexema-");
+            update_token (ref probable_token, lexema);
+            this.log.m (TAG, @"FINAL_TOKEN $probable_token");
+            this.has_more_tokens = this.source_manager.has_more_chars;
+
+            if (to_init)
+                this.state_machine.go_to_init_state ();
+            return true;
+
+        }
+
+        return false;
+    }
+
+    private bool last_opurtunity (ref Token probable_token, string lexema, bool to_init = false){
+
+        this.state_machine.go_to_next_state (' ');
+
+         if (this.is_end_state (ref probable_token, lexema, to_init))
+            return true;
+         else {
+
+            this.error            = LexicalError.INCOMPLETE_PATTERN;
+            probable_token.lexema = lexema;
+            this.token            = probable_token;
+            this.has_more_tokens  = false;
+            return false;
+
+        }
+    }
+
+}//class Lexical
+
+}// namespace Compiler
+
