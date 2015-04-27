@@ -77,6 +77,7 @@ namespace Compiler.Util{
 		NUMBER_TOO_LARGE,
 		ID_TOO_LARGE,
 
+		PUBLIC_CLASS_OVERFLOW,
 		CONSTANT_OVER_FLOW,
 		ATTRIBUTE_OVER_FLOW,
 		METHOD_OVER_FLOW,
@@ -143,7 +144,7 @@ namespace Compiler.Util{
 				return @"$acces_mode $name : $heritage";
 		}
 		public string to_string (){
-			string result = @"\n $acces_mode $name";
+			string result = this.header ();
 				
 			foreach (var c in constants)
 				result += @"$c";

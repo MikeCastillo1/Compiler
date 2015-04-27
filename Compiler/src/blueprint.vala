@@ -308,7 +308,7 @@ namespace Compiler {
 					_y += 20;
 				}
 			}
-		
+		 
 			foreach (var attribute in class_definition.attributes){
 				foreach (var item in attribute.id){
 					ctx.move_to (x+5,_y);
@@ -316,7 +316,7 @@ namespace Compiler {
 					_y += 20;   
 				}
 			}
-			_y += 10;
+			_y = 210;
 			foreach (var method in class_definition.methods){
 				ctx.move_to (x+5,_y);
 				ctx.show_text ( @"$method");
@@ -357,6 +357,10 @@ namespace Compiler {
 				ctx.stroke ();	
 			}
 		}
+		
+	}
+
+	private void save_uml(){
 		
 	}
 }//namespace Compiler

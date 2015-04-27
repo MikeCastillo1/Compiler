@@ -45,7 +45,7 @@ public class Syntactic : GLib.Object {
 
 	// Constructor
 	public Syntactic (bool verbose = false, string transition_table_path, string reserved_words_path){
-        this.log = new Log (verbose);
+        this.log = new Log (true);
         error = SyntacticError.NONE;
         this.lexical = new Lexicon.Lexical ();
 	    lexical.create_state_machine (transition_table_path);
@@ -56,6 +56,15 @@ public class Syntactic : GLib.Object {
 		lexical.create_source_manager (source_path);
 		this.lexical_error = "";
 		this.lexical.error = LexicalError.NONE;
+	}
+	public bool are_error (){
+		 
+		if (this.lexical.error == LexicalError.NONE 
+		    && this.error == SyntacticError.NONE
+		    &&  this.semantic.semantic_errors.size == 0)
+			return true;
+		else 
+			return false;
 	}
 	public void check_syntax (){
 		this.log.m (TAG,"CheckSyntax");
@@ -87,15 +96,16 @@ public class Syntactic : GLib.Object {
 		this.start_class_column = _token.column;
 		this.start_class_line = _token.line;
 		if (this.access_mode (ref _token)){
-			
+			this.last_acces_mode = this.semantic.get_acces_mode (this.lexical.token.type);
+			var _class_acces_token = this.lexical.token;
 			if (this.next_token ().type == Util.Type.RW_CLASS){
 				if (this.next_token ().type == Util.Type.ID){
 				/// semantic
-					var _class_name = this.lexical.token;
+					var _class_token = this.lexical.token;
 					this.semantic.check_length (this.lexical.token);
 
 					/// end semantic
-					if(this.heritage (this.next_token (), _class_name)){
+					if(this.heritage (this.next_token (), _class_token, _class_acces_token)){
 						log.m (TAG, "herencia");
 						_token = this.next_token ();
 						this.start_column = _token.column;
@@ -112,8 +122,14 @@ public class Syntactic : GLib.Object {
 									this.start_class_column = _token.column;
 									this.start_class_line = _token.line;
 									return this.class (_token);
-								} else
+								} else if (!this.lexical.has_more_tokens)
+									return true;
+								else{
+									this.sentence_error ();
+									this.error = SyntacticError.EXPECTED_ACCESS_MODE;
 									return false;
+								}
+									
 							} else {
 								if (this.error == SyntacticError.NONE){
 									this.sentence_error ();
@@ -140,15 +156,16 @@ public class Syntactic : GLib.Object {
 		}
 	}
 
-	private bool heritage (Token token, Token class_name){
+	private bool heritage (Token token, Token class_token, Token _class_acces_token){
 		if (token.type == Util.Type.RW_EXTENDS){
 			if (this.next_token ().type == Util.Type.ID){
-				var class_visibility = this.semantic.get_acces_mode (class_name.type);
-				
-				if (!this.semantic.symbols.has_key (class_name.lexema))
-					this.semantic.add_class (class_name.lexema, this.lexical.token.lexema,class_visibility);
-				else 
-					this.semantic.add_error (class_name,
+				log.m (TAG, @"visibility class $(this.last_acces_mode)");
+				if (!this.semantic.symbols.has_key (class_token.lexema))
+					this.semantic.add_class (class_token,
+											 this.lexical.token.lexema,
+											 _class_acces_token);
+				else
+					this.semantic.add_error (class_token,
 					                         SemanticError.CLASS_SYMBOL_ALREADY_DEFINED);
 				
 				this.semantic.check_length (this.lexical.token);
@@ -161,8 +178,6 @@ public class Syntactic : GLib.Object {
 					this.semantic.add_error (this.lexical.token,
 					                         SemanticError.HERITAGE_OVER_SAME_CLASS);
 
-				
-				
 				if (this.next_token ().type == Util.Type.CURLY_BRACKETS_O)
 					return true;
 				else return false;
@@ -172,11 +187,12 @@ public class Syntactic : GLib.Object {
 				return false;
 			}
 		} else if (token.type == Util.Type.CURLY_BRACKETS_O){
-			var class_visibility = this.semantic.get_acces_mode (class_name.type);
-			if (!this.semantic.symbols.has_key (class_name.lexema))
-				this.semantic.add_class (class_name.lexema, "",class_visibility);
-			else 
-				this.semantic.add_error (class_name,
+			if (!this.semantic.symbols.has_key (class_token.lexema))
+				this.semantic.add_class (class_token,
+										 "",
+				                         _class_acces_token);
+			else
+				this.semantic.add_error (class_token,
 				                         SemanticError.CLASS_SYMBOL_ALREADY_DEFINED);
 			return true;
 		}
@@ -201,17 +217,21 @@ public class Syntactic : GLib.Object {
 	private bool complement (Token token, string _acces_mode) {
 		var _token = token;
 		if (this.constant (_token, _acces_mode)){
+			if (this.lexical.token.type == Util.Type.CURLY_BRACKETS_C){
+				return true;
+			}
+			this.last_acces_mode = _acces_mode;
 			log.m (TAG, "Ahora checamos propiedades");
 			_token = this.lexical.token;
 			if (this.type (ref _token)){ 
-				var _type = this.lexical.token.lexema;
+				this.last_type = this.lexical.token.lexema;
 				if (this.next_token ().type == Util.Type.ID){
 					this.semantic.check_length (this.lexical.token);
 					this.semantic.check_symbol ( this.lexical.token);
-					var _id = this.lexical.token.lexema;
-					
-					if (this.attribute (this.next_token (), this.last_acces_mode, _type, _id)){
-						log.m (TAG, "Ahora checamos metodos");
+					this.last_id = this.lexical.token.lexema;
+					log.m (TAG, @"resto de atributos $(this.last_acces_mode)" );
+					if (this.attribute (this.next_token (), this.last_acces_mode, this.last_type, this.last_id)){
+						log.m (TAG, @"Ahora checamos metodos $(this.last_type)");
 						if (this.method (this.lexical.token, this.last_acces_mode, this.last_type, this.last_id)){
 							return true;
 						} else return false;
@@ -268,7 +288,7 @@ public class Syntactic : GLib.Object {
 									
 									this.last_acces_mode = this.semantic.get_acces_mode (_token.type); 
 										
-									this.start_column = _token.column;
+									this.start_column = _token.column;  
 									this.start_line   = _token.line;
 									var _visibility = this.semantic.get_acces_mode (this.lexical.token.type);
 									log.m (TAG, @"probalbe constante $(lexical.token)");
@@ -278,7 +298,10 @@ public class Syntactic : GLib.Object {
 										log.m (TAG, @"No es constante $(lexical.token)");
 										return true;
 									}
-								} else return false;
+								} else if (_token.type == Util.Type.CURLY_BRACKETS_C){
+									return true;
+								}
+								else return false;
 							} else {
 								this.error = SyntacticError.EXPECTED_SEMICOLON;
 								this.sentence_error ();
@@ -337,6 +360,9 @@ public class Syntactic : GLib.Object {
 		} else if (_token.type == Util.Type.PARENTHESIS_O){
 			log.m (TAG, "no es attributo");
 			return true;
+		}else if (_token.type == Util.Type.CURLY_BRACKETS_C){
+			log.m (TAG, "finclas");
+			return true;
 		} else {
 			this.error = SyntacticError.EXPECTED_SEMICOLON;
 			this.sentence_error ();
@@ -375,6 +401,7 @@ public class Syntactic : GLib.Object {
 		log.m (TAG,@"metodo $token" );
 		 var args = new TreeMap <string, string> ();
 		if (token.type == Util.Type.PARENTHESIS_O){
+			
 			this.semantic.method_args.clear ();
 			if (this.argument (this.next_token (), ref args)){
 				log.m (TAG,@"metodo $(lexical.token)" );

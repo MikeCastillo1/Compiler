@@ -51,6 +51,9 @@ namespace Compiler.UI{
 	private Blueprint blueprint;
 	private Stack main_stack;
 	private bool saved;
+	private MenuButton config_button;
+	private bool are_there_error;
+	
 
 	public Main ()
 	{
@@ -124,9 +127,13 @@ namespace Compiler.UI{
 		this.prev_button.relief = ReliefStyle.NONE;
 		this.prev_button.add (new Arrow (ArrowType.RIGHT,  Gtk.ShadowType.ETCHED_IN));
 
+		/** Menu */
+		this.config_button = new MenuButton ();
+
 		this.title = "source.java";
 
 		this.saved = true;
+		this.are_there_error = false;
 
 		this.header_bar = new Gtk.HeaderBar ();
 		this.header_bar.set_show_close_button (true);
@@ -171,16 +178,19 @@ namespace Compiler.UI{
 			this.header_bar.title = "source.java";
 		}
 	}
+	
 	private void on_play_button_clicked (){
-		on_debugger_button_clicked ();
 		this.save ();
-		var class_array = new ArrayList <ClassDefinition?> ();
-		class_array.add_all (this.syntactic.semantic.classes.values);
-		this.draw_box.remove (this.blueprint);
-		this.blueprint = new Blueprint (class_array);
-		this.draw_box.add (blueprint);
-		this.draw_box.show_all ();
-		this.main_stack.set_visible_child_name ("DRAW");
+		on_debugger_button_clicked ();		
+		if (this.are_there_error){
+			var class_array = new ArrayList <ClassDefinition?> ();
+			class_array.add_all (this.syntactic.semantic.classes.values);
+			this.draw_box.remove (this.blueprint);
+			this.blueprint = new Blueprint (class_array);
+			this.draw_box.add (blueprint);
+			this.draw_box.show_all ();
+			this.main_stack.set_visible_child_name ("DRAW");
+		}
 	}
 	private void on_debugger_button_clicked (){
 		this.syntactic.init_lexical (FILE_PATH);
@@ -198,6 +208,8 @@ namespace Compiler.UI{
 
 		this.log_out.update ();
 		this.log_revealer.reveal_child = true;
+
+		this.are_there_error = this.syntactic.are_error();
 	}
 	private void on_source_buffer_changed (){
 		this.saved = false;

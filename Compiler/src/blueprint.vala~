@@ -214,7 +214,7 @@ namespace Compiler {
 								
 								ctx.line_to (_x, end_point.y + margin);
 							} else {
-								ctx.line_to (init_point.x +class_x +20, end_point.y - margin );
+								ctx.line_to (init_point.x +class_x +20, end_point.y + margin );
 							}
 						}
 						ctx.line_to (end_point.x - 15, end_point.y + margin);
@@ -308,7 +308,7 @@ namespace Compiler {
 					_y += 20;
 				}
 			}
-		
+		 
 			foreach (var attribute in class_definition.attributes){
 				foreach (var item in attribute.id){
 					ctx.move_to (x+5,_y);
@@ -316,7 +316,7 @@ namespace Compiler {
 					_y += 20;   
 				}
 			}
-			_y += 10;
+			_y = 210;
 			foreach (var method in class_definition.methods){
 				ctx.move_to (x+5,_y);
 				ctx.show_text ( @"$method");
@@ -359,4 +359,6 @@ namespace Compiler {
 		}
 		
 	}
+
+	
 }//namespace Compiler

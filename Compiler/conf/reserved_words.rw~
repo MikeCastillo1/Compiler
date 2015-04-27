@@ -3,7 +3,9 @@ extends
 public
 private
 protected
+abstract
 string
 int
+float
 char
 const

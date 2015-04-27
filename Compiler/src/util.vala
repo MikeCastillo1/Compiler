@@ -71,12 +71,14 @@ namespace Compiler.Util{
 		CLASS_SYMBOL_ALREADY_DEFINED,
 		ID_SYMBOL_ALREADY_DEFINED,
 		CLASS_NAME_CAN_NOT_BE_USED_AS_ID_NAME,
+		PUBLIC_CLASS_MUST_BE_NAMED_LIKE_FILE,
 
 		ARGUMENT_ALREADY_DEFINED,
 		
 		NUMBER_TOO_LARGE,
 		ID_TOO_LARGE,
 
+		PUBLIC_CLASS_OVERFLOW,
 		CONSTANT_OVER_FLOW,
 		ATTRIBUTE_OVER_FLOW,
 		METHOD_OVER_FLOW,
@@ -232,7 +234,7 @@ namespace Compiler.Util{
 		public SentenceFound sentence_found;
 		public string to_string (){
 			var _s = @"$sentence_found".splice (0,23);
-			return @"[$_s]::[<$(this.start_line+1),$(this.start_column)>,<$(this.end_line)-$(this.end_column)>]";
+			return @"[$_s]::[<$(this.start_line+1),$(this.start_column+1)>,<$(this.end_line+1)-$(this.end_column)>]";
 		}
 		public Sentence (int start_line,
 						 int start_column,

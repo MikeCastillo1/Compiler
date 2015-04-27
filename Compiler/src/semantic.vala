@@ -13,12 +13,13 @@ namespace Compiler {
 		private const string TAG = "SEMANTIC";
 		private Log log;
 
-		public static const int MAX_ID_LENGTH      = 5;
+		public static const int MAX_ID_LENGTH      = 7;
 		public static const int MAX_NUM_LENGTH     = 7;
 		public static const int MAX_NUM_CONSTANTS  = 3;
 		public static const int MAX_NUM_ATTRIBUTES = 3;
 		public static const int MAX_NUM_METHODS    = 3;
 		public static const int MAX_NUM_CLASSES    = 10;
+		private const string PUBLIC_CLASS_NAME = "Source";
 	 
 		public bool has_attribute { get; set; }
 		public bool has_method { get; set; }
@@ -33,11 +34,13 @@ namespace Compiler {
 		public int attibute_count { get; set; }
 		public int method_count   { get; set; }
 		public Util.Type current_constant_type { get; set; }
+		private int8 public_cass_count;
 	 
-		public ArrayList <SemanticErrorLocalization?> semantic_errors;
+	 
+		public ArrayList <SemanticErrorLocalization?> semantic_errors {get; private set;}
 	 
 		public Semantic (bool verbose = false) {
-			this.log = new Log (true);
+			this.log = new Log (verbose);
 			this.has_attribute = false;
 			this.has_method = false;
 			this.has_attribute = false;
@@ -45,6 +48,7 @@ namespace Compiler {
 			this.constant_count = 0;
 			this.attibute_count = 0;
 			this.method_count   = 0;
+			this.public_cass_count = 0;
 			this.symbols = new TreeMap < string, TreeSet <string> > ();
 			this.classes = new TreeMap <string, ClassDefinition?> (); 
 			this.semantic_errors = new ArrayList<SemanticErrorLocalization?> ();
@@ -57,17 +61,29 @@ namespace Compiler {
 			this.has_attribute = false;
 			this.has_method = false;
 		}
-		public void add_class (string class_name,string heritage, string visibility){
-			this.current_class = class_name;
-			this.symbols.set (class_name, new TreeSet<string> ());
+		public void add_class (Token class_token,string heritage, Token visibility){
+			var _visibility = this.get_acces_mode (visibility.type);
+			if (_visibility == "+"){
+				
+				this.public_cass_count ++;
+				if (this.public_cass_count == 1 && class_token.lexema != PUBLIC_CLASS_NAME)
+					this.add_error (class_token, SemanticError.PUBLIC_CLASS_MUST_BE_NAMED_LIKE_FILE);
+				
+					
+				if (this.public_cass_count > 1)
+					this.add_error (visibility, SemanticError.PUBLIC_CLASS_OVERFLOW);
+			}
+
+			this.current_class = class_token.lexema;
+			this.symbols.set (class_token.lexema, new TreeSet<string> ());
 			var new_class = ClassDefinition ();
-			new_class.name = class_name;
-			new_class.acces_mode = visibility;
+			new_class.name = class_token.lexema;
+			new_class.acces_mode = _visibility;
 			new_class.heritage = heritage;
 			new_class.constants  = new ArrayList <Constant?> ();
 			new_class.attributes = new ArrayList <Attribute?> ();
 			new_class.methods    = new ArrayList <Method?> ();
-			this.classes.set (class_name, new_class);
+			this.classes.set (class_token.lexema, new_class);
 		}
 		public void add_constant (string type, string acces_mode, TreeMap <string,string> constants){
 			var @class = this.classes.get (this.current_class);
